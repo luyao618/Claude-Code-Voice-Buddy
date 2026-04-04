@@ -35,8 +35,8 @@ A personality-driven voice companion that hooks into Claude Code events. It anal
 | SessionEnd         | Hook direct   | Every time                                                |
 | PreToolUse         | Hook direct   | Whitelist only (git commit/push, npm test, pytest, etc.)  |
 | PostToolUse        | Hook direct   | Filtered: only meaningful results (test pass/fail, git ops). Silent for Read/Write/Glob/Grep etc. |
-| PostToolUseFailure | Hook direct   | Every time                                                |
-| Stop               | Subagent      | Filtered: only when last_assistant_message indicates a substantive task was completed (see Stop Trigger Criteria below) |
+| PostToolUseFailure | Hook direct   | Filtered: only for Bash tool failures. Silent for Read/Write/Glob/Grep failures. |
+| Stop               | Subagent      | Filtered: only when transcript indicates a substantive task was completed (see Stop Trigger Criteria below) |
 
 ### Data Flow - Hook Direct
 
@@ -68,6 +68,20 @@ Claude Code Stop hook trigger
     → stdin JSON contains: {"hook_event_name": "SubagentStop", "transcript_path": "...", "agent_transcript_path": "<path>"}
     → subagent_tts.py reads agent_transcript_path → extracts last assistant message → tts.py → player.py
 ```
+
+### Hook stdin Field Reference
+
+All events share BaseHookInput: `session_id`, `transcript_path`, `cwd`, `hook_event_name`.
+
+| Event              | Event-specific stdin fields                                    |
+| ------------------ | -------------------------------------------------------------- |
+| PreToolUse         | `tool_name`, `tool_input`, `tool_use_id`                       |
+| PostToolUse        | `inputs` (tool input), `response` (tool output)                |
+| PostToolUseFailure | `tool_name`, `tool_input`, `tool_use_id`, `error`, `error_type`|
+| Stop               | `agent_id`, `agent_type`                                       |
+| SubagentStop       | `agent_id`, `agent_type`, `agent_transcript_path`              |
+| SessionStart       | `source` (startup/resume/clear/compact)                        |
+| SessionEnd         | (BaseHookInput only)                                           |
 
 ### Stop Hook stdin Fields
 
@@ -126,7 +140,7 @@ When the voice-buddy subagent finishes, its frontmatter `Stop` hook is auto-conv
 | `injector.py`    | Stop event only. Read transcript from transcript_path, check trigger criteria, output additionalContext JSON if worthy. |
 | `cli.py`         | CLI commands: setup, uninstall, test.                              |
 | `config.py`      | Load buddy-config.json and templates.json.                         |
-| `subagent_tts.py`| Standalone script for subagent's Stop hook. Read transcript from transcript_path, extract last assistant message, call TTS. Exit silently if unavailable. |
+| `subagent_tts.py`| Standalone script for subagent's SubagentStop hook. Read transcript from agent_transcript_path, extract last assistant message, call TTS. Exit silently if unavailable. |
 
 ## File Structure
 
@@ -165,8 +179,8 @@ Claude-Code-Voice-Buddy/
 | Event              | Analysis Method                        | Example sub_events                                  |
 | ------------------ | -------------------------------------- | --------------------------------------------------- |
 | PreToolUse         | Whitelist regex match on tool_input    | `git_commit`, `git_push`, `test_run`                |
-| PostToolUse        | Keyword parsing on tool_name + tool_output | `test_passed`, `test_failed`, `git_success`     |
-| PostToolUseFailure | Error type classification              | `timeout`, `permission_error`, `general_error`      |
+| PostToolUse        | Keyword parsing on `inputs` + `response` fields | `test_passed`, `test_failed`, `git_success`     |
+| PostToolUseFailure | Check `tool_name`; only Bash failures are announced | `timeout`, `general_error`      |
 | SessionStart       | No analysis needed                     | `default`                                           |
 | SessionEnd         | No analysis needed                     | `default`                                           |
 | Stop               | Not analyzed (goes to injector)        | —                                                   |
@@ -184,13 +198,21 @@ All other tool uses (Read, Write, Glob, Grep, etc.) are silent.
 
 ### PostToolUse Filter
 
-PostToolUse only triggers voice for meaningful results. The context analyzer checks `tool_name` and `tool_output`:
+PostToolUse only triggers voice for meaningful results. The stdin JSON contains `inputs` (tool input) and `response` (tool output) fields — NOT `tool_name` / `tool_output`.
 
-- **Bash tool**: parse output for test results (pass/fail counts), git operation confirmations
+The context analyzer checks `inputs` to identify the tool and command, then parses `response`:
+
+- **Bash tool**: parse `response` for test results (pass/fail counts), git operation confirmations
 - **Write/Edit tool**: silent (too frequent, low information value)
 - **Read/Glob/Grep tool**: silent
 
 If `context.py` cannot classify the output into a known sub_event, it returns `None` and `main.py` exits silently (no `default` fallback for PostToolUse).
+
+### PostToolUseFailure Filter
+
+PostToolUseFailure stdin JSON contains `tool_name`, `error`, and `error_type` fields.
+
+Only Bash tool failures are announced. Failures from Read, Write, Glob, Grep, and other tools are silent — these are often exploratory (e.g., checking if a file exists) and not worth announcing.
 
 ### Context Result Structure
 
