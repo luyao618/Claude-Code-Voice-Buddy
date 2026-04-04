@@ -34,9 +34,9 @@ A personality-driven voice companion that hooks into Claude Code events. It anal
 | SessionStart       | Hook direct   | Every time                                                |
 | SessionEnd         | Hook direct   | Every time                                                |
 | PreToolUse         | Hook direct   | Whitelist only (git commit/push, npm test, pytest, etc.)  |
-| PostToolUse        | Hook direct   | Every time                                                |
+| PostToolUse        | Hook direct   | Filtered: only meaningful results (test pass/fail, git ops). Silent for Read/Write/Glob/Grep etc. |
 | PostToolUseFailure | Hook direct   | Every time                                                |
-| Stop               | Subagent      | Output additionalContext to prompt Claude to call subagent |
+| Stop               | Subagent      | Filtered: only when last_assistant_message indicates a substantive task was completed (see Stop Trigger Criteria below) |
 
 ### Data Flow - Hook Direct
 
@@ -54,14 +54,65 @@ Claude Code hook trigger
 
 ```
 Claude Code Stop hook trigger
-  → stdin JSON
+  → stdin JSON (contains transcript_path, NOT last_assistant_message)
   → main.py → injector.py
-  → stdout JSON: {"additionalContext": "Context summary + prompt to call voice-buddy agent"}
-  → Claude reads context, calls voice-buddy subagent
-  → Subagent generates one sentence in character (15-30 chars)
-  → Subagent's own Stop hook triggers
-  → subagent_tts.py reads last_assistant_message → tts.py → player.py
+  → injector.py reads transcript file from transcript_path
+  → Extracts the last assistant message from transcript
+  → Checks Stop Trigger Criteria (see below)
+  → If not worth announcing: exit silently (no output)
+  → If worth announcing:
+    → stdout JSON: {"additionalContext": "Context summary + prompt to call voice-buddy agent"}
+    → Claude reads context, calls voice-buddy subagent
+    → Subagent generates one sentence in character (15-30 chars)
+    → Subagent's own Stop hook triggers
+    → stdin JSON contains: {"hook_event_name": "Stop", "transcript_path": "<path>"}
+    → subagent_tts.py reads transcript file → extracts last assistant message → tts.py → player.py
 ```
+
+### Stop Hook stdin Fields
+
+The Stop hook receives these fields in stdin JSON (per Claude Code BaseHookInput + Stop-specific fields):
+
+```json
+{
+  "hook_event_name": "Stop",
+  "session_id": "...",
+  "transcript_path": "/path/to/transcript/file",
+  "cwd": "/current/working/directory",
+  "agent_id": "...",
+  "agent_type": "..."
+}
+```
+
+Note: `last_assistant_message` is NOT a stdin field. The transcript must be read from `transcript_path` and parsed to extract the last assistant message.
+
+### Stop Trigger Criteria
+
+The injector reads the transcript file from `transcript_path`, extracts the last assistant message, and evaluates whether to trigger. Triggering requires BOTH conditions:
+
+**Condition A (length gate):** message > 200 characters (filters out short Q&A)
+
+**Condition B (at least one semantic signal):**
+- **Completion signals**: message contains keywords like "done", "complete", "finished", "implemented", "fixed", "created", "refactored" (or Chinese equivalents)
+- **File modification signals**: message mentions files written, edited, or created
+- **Tool usage signals**: message references multiple tool calls or operations
+
+Both A and B must be satisfied. If either fails, injector exits silently.
+
+### Subagent Stop Hook Input Contract
+
+When the voice-buddy subagent finishes and its Stop hook fires, the hook receives stdin JSON with the standard Stop hook fields:
+
+```json
+{
+  "hook_event_name": "Stop",
+  "session_id": "...",
+  "transcript_path": "/path/to/subagent/transcript",
+  "cwd": "..."
+}
+```
+
+`subagent_tts.py` reads the transcript file from `transcript_path`, parses it to extract the last assistant message (which is the one sentence the subagent generated), then sends it to TTS for playback. If the transcript is missing, unreadable, or contains no assistant message, the script exits silently.
 
 ### Module Responsibilities
 
@@ -72,10 +123,10 @@ Claude Code Stop hook trigger
 | `response.py`    | Select template by event + sub_event, do variable substitution.    |
 | `tts.py`         | Call edge-tts to synthesize speech to a temp audio file.           |
 | `player.py`      | Cross-platform audio playback (macOS/Linux/Windows).               |
-| `injector.py`    | Stop event only. Output additionalContext JSON to stdout.          |
+| `injector.py`    | Stop event only. Read transcript from transcript_path, check trigger criteria, output additionalContext JSON if worthy. |
 | `cli.py`         | CLI commands: setup, uninstall, test.                              |
 | `config.py`      | Load buddy-config.json and templates.json.                         |
-| `subagent_tts.py`| Standalone script for subagent's Stop hook. Read stdin, call TTS.  |
+| `subagent_tts.py`| Standalone script for subagent's Stop hook. Read transcript from transcript_path, extract last assistant message, call TTS. Exit silently if unavailable. |
 
 ## File Structure
 
@@ -114,7 +165,7 @@ Claude-Code-Voice-Buddy/
 | Event              | Analysis Method                        | Example sub_events                                  |
 | ------------------ | -------------------------------------- | --------------------------------------------------- |
 | PreToolUse         | Whitelist regex match on tool_input    | `git_commit`, `git_push`, `test_run`                |
-| PostToolUse        | Keyword parsing on tool_output         | `test_passed`, `test_failed`, `file_written`        |
+| PostToolUse        | Keyword parsing on tool_name + tool_output | `test_passed`, `test_failed`, `git_success`     |
 | PostToolUseFailure | Error type classification              | `timeout`, `permission_error`, `general_error`      |
 | SessionStart       | No analysis needed                     | `default`                                           |
 | SessionEnd         | No analysis needed                     | `default`                                           |
@@ -130,6 +181,16 @@ Commands that trigger voice response:
 - `docker` commands
 
 All other tool uses (Read, Write, Glob, Grep, etc.) are silent.
+
+### PostToolUse Filter
+
+PostToolUse only triggers voice for meaningful results. The context analyzer checks `tool_name` and `tool_output`:
+
+- **Bash tool**: parse output for test results (pass/fail counts), git operation confirmations
+- **Write/Edit tool**: silent (too frequent, low information value)
+- **Read/Glob/Grep tool**: silent
+
+If `context.py` cannot classify the output into a known sub_event, it returns `None` and `main.py` exits silently (no `default` fallback for PostToolUse).
 
 ### Context Result Structure
 
@@ -155,8 +216,7 @@ class ContextResult:
   "posttooluse": {
     "test_passed": ["测试全过了！太棒了！", "哦尼酱好厉害，全绿了呢！"],
     "test_failed": ["有测试没过呢...不过别担心哦~"],
-    "file_written": ["文件写好了呢~"],
-    "default": ["搞定啦！"]
+    "git_success": ["搞定啦！", "操作完成了哟~"]
   },
   "posttoolusefailure": {
     "timeout": ["等太久了呜呜...换个方式试试？"],
@@ -225,7 +285,9 @@ The `<repo_path>` placeholder is replaced with the actual absolute path during `
 2. Read existing settings.json (create if missing)
 3. Inject hook config for 6 events, all pointing to `python3 /abs/path/voice_buddy/__main__.py`
    - All hooks: `type: "command"`, `timeout: 5000`, `async: true`
+   - PreToolUse hook adds `"matcher": "Bash"` to only trigger on Bash tool (where shell commands run)
    - If other hooks already exist for the same event, append (do not overwrite)
+   - Each injected hook entry includes a marker field: `"_voice_buddy": true` for reliable identification during uninstall
 4. Copy `voice-buddy.md` to target `.claude/agents/` (replace `<repo_path>` placeholder)
    - Default: `<project>/.claude/agents/`
    - `--global`: `~/.claude/agents/`
@@ -233,7 +295,7 @@ The `<repo_path>` placeholder is replaced with the actual absolute path during `
 ### voice-buddy uninstall [--global]
 
 1. Read target settings.json
-2. Remove voice-buddy hook entries (identified by path containing `voice_buddy`)
+2. Remove hook entries that have `"_voice_buddy": true` marker
 3. Delete `.claude/agents/voice-buddy.md`
 4. Preserve all other hook configurations
 
