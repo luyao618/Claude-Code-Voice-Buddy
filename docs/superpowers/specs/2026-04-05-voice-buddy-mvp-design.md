@@ -108,9 +108,8 @@ The injector reads the transcript file from `transcript_path`, extracts the last
 
 - **Completion signals**: message contains keywords like "done", "complete", "finished", "implemented", "fixed", "created", "refactored", "updated" (or Chinese equivalents: "完成", "修复", "实现", "搞定", "创建")
 - **File modification signals**: message mentions files written, edited, or created (e.g., "wrote to", "updated", "created file")
-- **Summary patterns**: message has a list/recap structure (bullet points summarizing what was done)
 
-If no semantic signal is detected, injector exits silently — no additionalContext, no subagent call. This avoids triggering on casual Q&A, explanations, or design discussions.
+If no semantic signal is detected, injector exits silently — no additionalContext, no subagent call. This avoids triggering on casual Q&A, explanations, design discussions, or bullet-point summaries that don't indicate task completion.
 
 ### Subagent Stop Hook Input Contract
 
@@ -126,7 +125,7 @@ When the voice-buddy subagent finishes, its frontmatter `Stop` hook is auto-conv
 }
 ```
 
-`subagent_tts.py` reads the transcript file from `agent_transcript_path` (NOT `transcript_path`), parses it to extract the last assistant message (which is the one sentence the subagent generated), then sends it to TTS for playback. If `agent_transcript_path` is missing, falls back to `transcript_path`. If neither is available or contains no assistant message, the script exits silently.
+`subagent_tts.py` reads the transcript file from `agent_transcript_path` (NOT `transcript_path` — that points to the parent session transcript and would produce wrong content). If `agent_transcript_path` is missing or the transcript contains no assistant message, the script exits silently.
 
 ### Module Responsibilities
 
@@ -367,6 +366,8 @@ Minimal. Only external dependency is edge-tts. Everything else uses Python stdli
 
 ## Verification Plan
 
+### Positive Cases (should trigger voice)
+
 1. `voice-buddy setup` → hook config appears in `.claude/settings.json`, agent file in `.claude/agents/`
 2. `voice-buddy test sessionstart` → hear "欢迎回来，哦尼酱！"
 3. `voice-buddy test posttooluse` → hear a success response
@@ -375,3 +376,12 @@ Minimal. Only external dependency is edge-tts. Everything else uses Python stdli
 6. Start Claude Code in a setup project → hear session greeting
 7. Run tests in Claude Code → hear test result response
 8. Complete a task → Stop event triggers subagent → hear intelligent summary
+
+### Negative Cases (should stay silent)
+
+9. PostToolUse for Read/Write/Glob/Grep → no voice output
+10. PostToolUseFailure for non-Bash tool (e.g., Read fails) → no voice output
+11. PreToolUse for non-whitelisted Bash command (e.g., `ls`, `cat`) → no voice output
+12. Stop after a short Q&A answer (no completion keywords) → no additionalContext output
+13. Stop after a design discussion (bullet points but no completion signals) → no additionalContext output
+14. SubagentStop with missing `agent_transcript_path` → silent exit, no TTS
