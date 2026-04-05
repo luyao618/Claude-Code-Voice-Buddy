@@ -9,6 +9,8 @@ Playback is asynchronous (subprocess.Popen with start_new_session=True)
 so the hook script exits immediately without waiting for audio to finish.
 """
 
+from __future__ import annotations
+
 import platform
 import subprocess
 import sys
