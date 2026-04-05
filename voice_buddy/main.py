@@ -11,14 +11,7 @@ from voice_buddy.player import play_audio
 
 def handle_hook_event(data: dict) -> None:
     """Process a hook event: analyze, generate response, speak."""
-    event_name = data.get("hook_event_name", "")
-
-    # Stop event: delegate to injector (outputs additionalContext JSON)
-    if event_name == "Stop":
-        handle_stop_event(data)
-        return
-
-    # All other events: context -> response -> tts -> play
+    # All events: context -> response -> tts -> play
     ctx = analyze_context(data)
     if ctx is None:
         return  # Event filtered out, stay silent
@@ -32,12 +25,6 @@ def handle_hook_event(data: dict) -> None:
         return  # TTS failed, stay silent
 
     play_audio(audio_path)
-
-
-def handle_stop_event(data: dict) -> None:
-    """Handle Stop event via injector."""
-    from voice_buddy.injector import process_stop_event
-    process_stop_event(data)
 
 
 def run() -> None:

@@ -29,15 +29,11 @@ def _make_matcher_group(repo_path: str, event: str) -> dict:
     import shlex
     quoted_path = shlex.quote(repo_path)
 
-    # Stop hook must be synchronous so Claude reads additionalContext from stdout.
-    # All other hooks are async to avoid blocking Claude.
-    is_async = event != "Stop"
-
     hook_cmd = {
         "type": "command",
         "command": f"PYTHONPATH={quoted_path} python3 -m voice_buddy",
         "timeout": 5000,
-        "async": is_async,
+        "async": True,
     }
 
     matcher_group = {

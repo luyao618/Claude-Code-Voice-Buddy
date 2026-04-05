@@ -62,8 +62,9 @@ def analyze_context(data: dict) -> Optional[ContextResult]:
         return ContextResult(event="sessionstart", sub_event="default", mood="happy")
     elif event_name == "SessionEnd":
         return ContextResult(event="sessionend", sub_event="default", mood="neutral")
+    elif event_name == "Stop":
+        return _analyze_stop(data)
     else:
-        # Stop and unknown events: return None (Stop is handled by injector)
         return None
 
 
@@ -156,4 +157,27 @@ def _analyze_posttoolusefailure(data: dict) -> Optional[ContextResult]:
         sub_event=sub_event,
         mood=mood,
         detail=error_msg[:200],
+    )
+
+
+def _analyze_stop(data: dict) -> Optional[ContextResult]:
+    """Stop: read transcript, check if a substantive task was completed."""
+    from voice_buddy.injector import extract_last_assistant_message, _should_trigger
+
+    transcript_path = data.get("transcript_path", "")
+    if not transcript_path:
+        return None
+
+    message = extract_last_assistant_message(transcript_path)
+    if message is None:
+        return None
+
+    if not _should_trigger(message):
+        return None
+
+    return ContextResult(
+        event="stop",
+        sub_event="task_completed",
+        mood="happy",
+        detail=message[:200],
     )
