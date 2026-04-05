@@ -13,9 +13,7 @@ _REPO_ROOT = Path(__file__).parent.parent
 _HOOK_EVENTS = [
     "SessionStart",
     "SessionEnd",
-    "PreToolUse",
-    "PostToolUse",
-    "PostToolUseFailure",
+    "Notification",
     "Stop",
 ]
 
@@ -44,9 +42,6 @@ def _make_matcher_group(repo_path: str, event: str) -> dict:
         "hooks": [hook_cmd],
         "_voice_buddy": True,  # Marker for reliable uninstall
     }
-
-    if event == "PreToolUse":
-        matcher_group["matcher"] = "Bash"
 
     return matcher_group
 
@@ -152,21 +147,13 @@ def do_test(event: str) -> None:
             "session_id": "test",
             "cwd": os.getcwd(),
         },
-        "pretooluse": {
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": "git commit -m 'test commit'"},
-        },
-        "posttooluse": {
-            "hook_event_name": "PostToolUse",
-            "inputs": {"command": "python -m pytest tests/ -v"},
-            "response": "===== 10 passed in 1.23s =====",
-        },
-        "posttoolusefailure": {
-            "hook_event_name": "PostToolUseFailure",
-            "tool_name": "Bash",
-            "error": "Command failed with exit code 1",
-            "error_type": "command_error",
+        "notification": {
+            "hook_event_name": "Notification",
+            "message": "Claude has a question for you",
+            "title": "Claude Code",
+            "notification_type": "question",
+            "session_id": "test",
+            "cwd": os.getcwd(),
         },
     }
 

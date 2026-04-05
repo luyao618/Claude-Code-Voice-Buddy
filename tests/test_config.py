@@ -19,14 +19,13 @@ def test_load_config_has_tts_settings():
 def test_load_templates_returns_dict():
     templates = load_templates()
     assert isinstance(templates, dict)
-    assert "pretooluse" in templates
-    assert "posttooluse" in templates
-    assert "posttoolusefailure" in templates
     assert "sessionstart" in templates
     assert "sessionend" in templates
+    assert "notification" in templates
+    assert "stop" in templates
 
 
 def test_load_templates_has_entries():
     templates = load_templates()
-    assert len(templates["pretooluse"]["git_commit"]) >= 1
     assert len(templates["sessionstart"]["default"]) >= 1
+    assert len(templates["notification"]["default"]) >= 1
