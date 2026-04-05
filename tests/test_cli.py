@@ -20,7 +20,26 @@ def test_setup_creates_settings_json(tmp_path):
     settings = json.loads(settings_path.read_text())
     assert "hooks" in settings
     assert "SessionStart" in settings["hooks"]
+    assert "SessionEnd" in settings["hooks"]
+    assert "Notification" in settings["hooks"]
     assert "Stop" in settings["hooks"]
+
+
+def test_setup_does_not_register_tooluse_events(tmp_path):
+    """ToolUse events should NOT be registered."""
+    project_dir = tmp_path / "myproject"
+    project_dir.mkdir()
+    (project_dir / ".claude").mkdir()
+
+    repo_path = Path(__file__).parent.parent
+
+    do_setup(project_dir=str(project_dir), repo_path=str(repo_path))
+
+    settings = json.loads((project_dir / ".claude" / "settings.json").read_text())
+
+    assert "PreToolUse" not in settings["hooks"]
+    assert "PostToolUse" not in settings["hooks"]
+    assert "PostToolUseFailure" not in settings["hooks"]
 
 
 def test_setup_uses_nested_matcher_group_format(tmp_path):
@@ -35,9 +54,8 @@ def test_setup_uses_nested_matcher_group_format(tmp_path):
 
     settings = json.loads((project_dir / ".claude" / "settings.json").read_text())
 
-    # Each event should have a list of matcher groups
-    # Stop is synchronous (async: false) so Claude reads decision + additionalContext
-    for event_name in ["SessionStart", "SessionEnd", "PostToolUse", "PostToolUseFailure"]:
+    # Async events
+    for event_name in ["SessionStart", "SessionEnd", "Notification"]:
         matcher_groups = settings["hooks"][event_name]
         assert len(matcher_groups) >= 1
         vb_group = [g for g in matcher_groups if g.get("_voice_buddy")][0]
@@ -54,22 +72,6 @@ def test_setup_uses_nested_matcher_group_format(tmp_path):
     stop_groups = settings["hooks"]["Stop"]
     stop_vb = [g for g in stop_groups if g.get("_voice_buddy")][0]
     assert stop_vb["hooks"][0]["async"] is False
-
-
-def test_setup_pretooluse_has_matcher(tmp_path):
-    project_dir = tmp_path / "myproject"
-    project_dir.mkdir()
-    (project_dir / ".claude").mkdir()
-
-    repo_path = Path(__file__).parent.parent
-
-    do_setup(project_dir=str(project_dir), repo_path=str(repo_path))
-
-    settings = json.loads((project_dir / ".claude" / "settings.json").read_text())
-
-    pretooluse_groups = settings["hooks"]["PreToolUse"]
-    vb_group = [g for g in pretooluse_groups if g.get("_voice_buddy")][0]
-    assert vb_group.get("matcher") == "Bash"
 
 
 def test_setup_preserves_existing_hooks(tmp_path):

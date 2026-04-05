@@ -6,24 +6,24 @@
 
 ## 中文
 
-**Voice Buddy** 让 Claude Code 不再沉默。编程时，你会听到 **小星 (XiaoXing)** —— 一个活泼的语音伙伴，用鼓励的话语回应你的每一个编程动作。
+**Voice Buddy** 让 Claude Code 不再沉默。编程时，你会听到 **小星 (XiaoXing)** —— 一个活泼的语音伙伴，在关键时刻用鼓励的话语陪伴你。
 
 ```
-提交代码    → "要提交代码咯，加油！"
-测试通过    → "测试全过了！太棒了！"
-出了问题    → "出了点小问题...别担心哦~"
-任务完成    → "哦尼酱，bug修好啦~"
+打开 Claude Code  → "欢迎回来，哦尼酱！今天也要加油哦~"
+需要你注意时      → "哦尼酱，过来看一下呢~"
+任务完成          → "哦尼酱，bug修好啦~"
+关闭会话          → "辛苦啦！下次见哦~"
 ```
 
 ### 工作原理
 
-Voice Buddy 接入 [Claude Code 的 Hook 系统](https://docs.anthropic.com/en/docs/claude-code/hooks)。当 Claude Code 触发事件（开始会话、运行命令、完成任务）时，Voice Buddy 分析上下文，选择合适的回复，通过 TTS 语音播报。
+Voice Buddy 接入 [Claude Code 的 Hook 系统](https://docs.anthropic.com/en/docs/claude-code/hooks)。当 Claude Code 触发关键事件时，Voice Buddy 分析上下文，选择合适的回复，通过 TTS 语音播报。
 
 **双通道架构：**
 
 | 通道 | 延迟 | 适用场景 | 实现方式 |
 |------|------|----------|----------|
-| **快速通道** | ~1s | 问候、工具使用、错误提示 | 模板匹配 + edge-tts |
+| **快速通道** | ~1s | 问候、通知、告别 | 模板匹配 + edge-tts |
 | **智能通道** | ~3s | 任务完成总结 | Claude subagent 生成上下文感知回复 + TTS |
 
 ### 快速开始
@@ -59,8 +59,8 @@ python -m voice_buddy.cli setup
 
 ```bash
 python -m voice_buddy.cli test sessionstart    # 听到问候语
-python -m voice_buddy.cli test posttooluse     # 听到测试通过庆祝
-python -m voice_buddy.cli test pretooluse      # 听到 git commit 鼓励
+python -m voice_buddy.cli test notification    # 听到通知提醒
+python -m voice_buddy.cli test sessionend      # 听到告别语
 ```
 
 然后在安装了 Hook 的项目里启动 Claude Code —— 小星会跟你打招呼！
@@ -76,7 +76,7 @@ python -m voice_buddy.cli test pretooluse      # 听到 git commit 鼓励
 | `python -m voice_buddy.cli uninstall --global` | 全局卸载 |
 | `python -m voice_buddy.cli test <event>` | 测试指定事件 |
 
-可测试事件: `sessionstart`, `sessionend`, `pretooluse`, `posttooluse`, `posttoolusefailure`, `stop`
+可测试事件: `sessionstart`, `sessionend`, `notification`, `stop`
 
 ### 支持的事件
 
@@ -84,19 +84,16 @@ python -m voice_buddy.cli test pretooluse      # 听到 git commit 鼓励
 |------|----------|-------------|
 | **SessionStart** | 打开 Claude Code | "欢迎回来，哦尼酱！今天也要加油哦~" |
 | **SessionEnd** | 关闭会话 | "辛苦啦！下次见哦~" |
-| **PreToolUse** | 执行 git/test/docker 命令前 | "要提交代码咯，加油！" |
-| **PostToolUse** | 测试通过或 git 操作成功后 | "测试全过了！太棒了！" |
-| **PostToolUseFailure** | 命令失败或超时 | "出了点小问题...别担心哦~" |
+| **Notification** | Claude 发送通知，需要你注意时 | "哦尼酱，过来看一下呢~" |
 | **Stop** | Claude 完成任务 | AI 生成的总结，如 "哦尼酱，bug修好啦~" |
 
-#### 智能事件检测
+#### 设计理念
 
-Voice Buddy 不会在每次工具调用时都说话 —— 它会分析上下文，只在有意义的时候开口：
+Voice Buddy 只在**真正需要你注意的时刻**才说话，不会在每次工具调用时打扰你：
 
-- **PreToolUse**: 仅对识别到的 Bash 命令触发（git, pytest, npm, docker）
-- **PostToolUse**: 仅在检测到测试结果或 git 操作结果时触发
-- **PostToolUseFailure**: 仅对 Bash 工具失败触发
-- **Stop**: 仅在完成了实质性任务时触发（支持中英文完成关键词检测）
+- **SessionStart/End**: 开始和结束时的问候与告别
+- **Notification**: Claude 发出通知时提醒你回来看看（权限确认、问题需要回答等）
+- **Stop**: 任务完成时用 AI 生成个性化总结
 
 ### 配置
 
@@ -135,8 +132,8 @@ Voice Buddy 不会在每次工具调用时都说话 —— 它会分析上下文
   "sessionstart": {
     "default": ["你的自定义问候语"]
   },
-  "posttooluse": {
-    "test_passed": ["你的自定义庆祝语"]
+  "notification": {
+    "default": ["你的自定义通知提醒"]
   }
 }
 ```
@@ -166,24 +163,24 @@ tail -f ~/voice-buddy-debug.log
 
 ## English
 
-**Voice Buddy** turns Claude Code into a more human experience. Instead of staring at a silent terminal, you'll hear **XiaoXing** (小星) - a cheerful voice companion that reacts to what's happening in your coding session with encouraging words.
+**Voice Buddy** turns Claude Code into a more human experience. Instead of staring at a silent terminal, you'll hear **XiaoXing** (小星) - a cheerful voice companion that speaks up at the moments that matter.
 
 ```
-You commit code    → "要提交代码咯，加油！"
-Tests all pass     → "测试全过了！太棒了！"
-Something breaks   → "出了点小问题...别担心哦~"
-Task completed     → "哦尼酱，bug修好啦~"
+Open Claude Code       → "欢迎回来，哦尼酱！今天也要加油哦~"
+Needs your attention   → "哦尼酱，过来看一下呢~"
+Task completed         → "哦尼酱，bug修好啦~"
+Close session          → "辛苦啦！下次见哦~"
 ```
 
 ### How It Works
 
-Voice Buddy hooks into [Claude Code's hook system](https://docs.anthropic.com/en/docs/claude-code/hooks). When Claude Code triggers events (starting a session, running a command, finishing a task), Voice Buddy analyzes the context, picks an appropriate response, and speaks it aloud via text-to-speech.
+Voice Buddy hooks into [Claude Code's hook system](https://docs.anthropic.com/en/docs/claude-code/hooks). When Claude Code triggers key events, Voice Buddy analyzes the context, picks an appropriate response, and speaks it aloud via text-to-speech.
 
 **Two-tier architecture:**
 
 | Path | Latency | Used for | How |
 |------|---------|----------|-----|
-| **Fast** | ~1s | Greetings, tool use, errors | Template matching + edge-tts |
+| **Fast** | ~1s | Greetings, notifications, goodbyes | Template matching + edge-tts |
 | **Smart** | ~3s | Task completion summaries | Claude subagent generates context-aware response + TTS |
 
 ### Quick Start
@@ -219,8 +216,8 @@ python -m voice_buddy.cli setup
 
 ```bash
 python -m voice_buddy.cli test sessionstart    # Hear a greeting
-python -m voice_buddy.cli test posttooluse     # Hear test-pass celebration
-python -m voice_buddy.cli test pretooluse      # Hear git commit encouragement
+python -m voice_buddy.cli test notification    # Hear a notification alert
+python -m voice_buddy.cli test sessionend      # Hear a goodbye
 ```
 
 Then start Claude Code in the project where you installed hooks - XiaoXing will greet you!
@@ -236,7 +233,7 @@ Then start Claude Code in the project where you installed hooks - XiaoXing will 
 | `python -m voice_buddy.cli uninstall --global` | Remove hooks globally |
 | `python -m voice_buddy.cli test <event>` | Test a specific hook event |
 
-Available test events: `sessionstart`, `sessionend`, `pretooluse`, `posttooluse`, `posttoolusefailure`, `stop`
+Available test events: `sessionstart`, `sessionend`, `notification`, `stop`
 
 ### Supported Events
 
@@ -244,19 +241,16 @@ Available test events: `sessionstart`, `sessionend`, `pretooluse`, `posttooluse`
 |-------|------|------------------|
 | **SessionStart** | You open Claude Code | "欢迎回来，哦尼酱！今天也要加油哦~" |
 | **SessionEnd** | You close the session | "辛苦啦！下次见哦~" |
-| **PreToolUse** | Before git/test/docker commands | "要提交代码咯，加油！" |
-| **PostToolUse** | Tests pass or git succeeds | "测试全过了！太棒了！" |
-| **PostToolUseFailure** | A command fails or times out | "出了点小问题...别担心哦~" |
+| **Notification** | Claude sends a notification that needs your attention | "哦尼酱，过来看一下呢~" |
 | **Stop** | Claude finishes a task | AI-generated summary like "哦尼酱，bug修好啦~" |
 
-#### Smart event detection
+#### Design Philosophy
 
-Voice Buddy doesn't speak on every tool use - it analyzes context to stay relevant:
+Voice Buddy only speaks at **moments that truly need your attention**, not on every tool call:
 
-- **PreToolUse**: Only triggers for recognized Bash commands (git, pytest, npm, docker)
-- **PostToolUse**: Only triggers when test results or git outcomes are detected
-- **PostToolUseFailure**: Only triggers for Bash tool failures
-- **Stop**: Only triggers when a substantive task was completed (detects completion keywords in both English and Chinese)
+- **SessionStart/End**: Greetings and goodbyes at the start and end of sessions
+- **Notification**: Alerts you when Claude sends a notification (permission requests, questions needing answers, etc.)
+- **Stop**: AI-generated personality-driven summary when a task completes
 
 ### Architecture
 
@@ -334,8 +328,8 @@ Edit `templates.json` to customize what XiaoXing says:
   "sessionstart": {
     "default": ["Your custom greeting here"]
   },
-  "posttooluse": {
-    "test_passed": ["Your custom celebration here"]
+  "notification": {
+    "default": ["Your custom notification alert here"]
   }
 }
 ```
@@ -355,7 +349,7 @@ python -m pytest tests/test_context.py -v
 
 #### Test coverage
 
-58 tests covering all core modules: context analysis, response selection, TTS synthesis, audio playback, CLI commands, configuration loading, and the Stop event injector.
+45 tests covering all core modules: context analysis, response selection, TTS synthesis, audio playback, CLI commands, configuration loading, and the Stop event injector.
 
 #### Debugging
 
