@@ -47,10 +47,10 @@ Voice Buddy 接入 [Claude Code 的 Hook 系统](https://docs.anthropic.com/en/d
 
 #### 从 Plugin Marketplace 安装
 
-在 Claude Code 中运行：
-```
-/plugin marketplace add luyao618/Claude-Code-Voice-Buddy
-/plugin install voice-buddy
+在 Claude Code 中依次运行以下两条命令：
+```bash
+/plugin marketplace add luyao618/Claude-Code-Voice-Buddy   # 1. 添加插件源
+/plugin install voice-buddy                                 # 2. 安装插件
 ```
 
 安装时会提示选择**风格**和**称呼**，也可以直接回车使用默认值（cute-girl / Master）。
@@ -159,10 +159,10 @@ Voice Buddy hooks into [Claude Code's hook system](https://docs.anthropic.com/en
 
 #### Install from Plugin Marketplace
 
-Run inside Claude Code:
-```
-/plugin marketplace add luyao618/Claude-Code-Voice-Buddy
-/plugin install voice-buddy
+Run these two commands in Claude Code, one after the other:
+```bash
+/plugin marketplace add luyao618/Claude-Code-Voice-Buddy   # 1. Add plugin source
+/plugin install voice-buddy                                 # 2. Install plugin
 ```
 
 During installation you'll be prompted to choose a **style** and **nickname**. Press Enter to use defaults (cute-girl / Master).
