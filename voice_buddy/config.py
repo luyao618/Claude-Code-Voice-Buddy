@@ -1,10 +1,10 @@
 """Cross-platform user configuration for Voice Buddy."""
 
+import copy
 import json
 import os
 import platform
 from pathlib import Path
-from typing import Optional
 
 DEFAULT_CONFIG = {
     "style": "cute-girl",
@@ -56,7 +56,7 @@ def load_user_config() -> dict:
         config_dir.mkdir(parents=True, exist_ok=True)
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(DEFAULT_CONFIG, f, indent=2, ensure_ascii=False)
-        return dict(DEFAULT_CONFIG)
+        return copy.deepcopy(DEFAULT_CONFIG)
 
 
 def save_user_config(config: dict) -> None:
