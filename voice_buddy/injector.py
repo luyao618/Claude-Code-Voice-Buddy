@@ -96,58 +96,59 @@ def _should_trigger(message: str) -> bool:
     return False
 
 
-def process_stop_event(data: dict) -> None:
+def process_stop_event(data: dict, user_config: dict = None) -> None:
     """Handle Stop event: block via exit code 2 to trigger subagent.
 
-    Exit code 2 prevents Claude from stopping and feeds stderr to Claude.
-    We use stderr to prompt Claude to call the voice-buddy subagent.
+    Exit code 2 prevents Claude from stopping and feeds stderr back to Claude.
+    We output JSON with decision=block and style-aware additionalContext so
+    Claude knows to call the voice-buddy subagent.
     """
-    from voice_buddy.main import _debug
+    if user_config is None:
+        from voice_buddy.config import load_user_config
+        user_config = load_user_config()
 
     # Guard: don't re-trigger if we're already inside a stop-hook retry.
     # Claude Code sets stop_hook_active=true on the second invocation to
     # prevent infinite blocking loops.
     if data.get("stop_hook_active"):
-        _debug("  injector: stop_hook_active=true, skipping to avoid loop")
         return
 
     # Prefer last_assistant_message from hook input (reliable, no race condition).
     # Fall back to reading transcript file (for older Claude Code versions).
     message = data.get("last_assistant_message")
-    if message:
-        _debug(f"  injector: using last_assistant_message from hook input")
-    else:
+    if not message:
         transcript_path = data.get("transcript_path", "")
         if not transcript_path:
-            _debug("  injector: no transcript_path and no last_assistant_message")
             return
         message = extract_last_assistant_message(transcript_path)
         if message is None:
-            _debug(f"  injector: no assistant message found in {transcript_path}")
             return
 
-    _debug(f"  injector: last assistant msg (first 100 chars): {message[:100]}")
-
     if not _should_trigger(message):
-        _debug(f"  injector: _should_trigger returned False")
         return
 
-    _debug(f"  injector: TRIGGERED! Using exit code 2 to block and inject context")
+    # Build style-aware additionalContext
+    style_id = user_config.get("style", "cute-girl")
+    nickname = user_config.get("nickname", "Master")
+    persona_override = user_config.get("persona_override")
 
-    # Keep summary very short — agent only needs to know WHAT was done
-    summary = message[:150] if len(message) > 150 else message
+    from voice_buddy.styles import load_style
+    style = load_style(style_id)
+    agent_name = style["agent"] if style else "voice-buddy-cute-girl"
 
-    # Exit code 2: Claude Code blocks the stop and feeds stderr back to Claude.
-    # Two-step instruction: 1) call agent to get text, 2) use Bash to TTS it.
-    print(
-        f"REQUIRED ACTION — two steps:\n"
-        f"1. Call the voice-buddy agent: Agent tool, prompt=\"{summary}\"\n"
-        f"2. After agent returns a sentence, call Bash to speak it:\n"
-        f"   PYTHONPATH=/Users/yao/work/code/personal/Claude-Code-Voice-Buddy python3 -c \"\n"
-        f"   from voice_buddy.tts import synthesize_to_file; from voice_buddy.player import play_audio\n"
-        f"   a = synthesize_to_file('<AGENT_RESPONSE>'); play_audio(a) if a else None\"\n"
-        f"Replace <AGENT_RESPONSE> with the agent's actual output sentence.\n"
-        f"Do both steps. Do not skip step 2.",
-        file=sys.stderr,
-    )
+    context_parts = [
+        f"Voice Buddy Stop: nickname={nickname}, style={style_id}",
+        f"persona_override={'null' if persona_override is None else persona_override}",
+        f"Task summary: {message[:200]}",
+        f"Generate a {style_id} style one-sentence summary addressing the user as {nickname},",
+        f"then call: python3 -m voice_buddy.subagent_tts '<your sentence>'",
+    ]
+    additional_context = ". ".join(context_parts)
+
+    output = {
+        "decision": "block",
+        "additionalContext": additional_context,
+    }
+
+    print(json.dumps(output), file=sys.stderr)
     sys.exit(2)

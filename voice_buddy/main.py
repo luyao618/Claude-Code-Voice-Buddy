@@ -107,7 +107,7 @@ def handle_hook_event(data: dict) -> None:
 def handle_stop_event(data: dict, user_config: dict = None) -> None:
     """Handle Stop event: block + inject context to trigger subagent."""
     from voice_buddy.injector import process_stop_event
-    process_stop_event(data)
+    process_stop_event(data, user_config)
 
 
 def run() -> None:

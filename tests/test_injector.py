@@ -1,6 +1,21 @@
 import json
 import os
+import pytest
 from voice_buddy.injector import process_stop_event, extract_last_assistant_message, _should_trigger
+
+
+# --- Default user_config for tests ---
+
+def _make_config(**kwargs):
+    base = {
+        "style": "cute-girl",
+        "nickname": "Master",
+        "enabled": True,
+        "events": {"stop": True},
+        "persona_override": None,
+    }
+    base.update(kwargs)
+    return base
 
 
 # --- Transcript parsing ---
@@ -92,7 +107,7 @@ def test_should_not_trigger_design_discussion():
 
 # --- Full process ---
 
-def test_process_stop_event_triggers(tmp_path, capsys):
+def test_process_stop_event_triggers(tmp_path, capfd):
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
         '{"role": "assistant", "content": "I have implemented the feature and created 3 files."}\n',
@@ -100,17 +115,17 @@ def test_process_stop_event_triggers(tmp_path, capsys):
     )
     data = {"hook_event_name": "Stop", "transcript_path": str(transcript)}
 
-    import pytest
     with pytest.raises(SystemExit) as exc_info:
-        process_stop_event(data)
+        process_stop_event(data, _make_config())
     assert exc_info.value.code == 2
 
-    captured = capsys.readouterr()
-    assert "REQUIRED ACTION" in captured.err
-    assert "voice-buddy" in captured.err
+    captured = capfd.readouterr()
+    output = json.loads(captured.err)
+    assert output["decision"] == "block"
+    assert "additionalContext" in output
 
 
-def test_process_stop_event_prefers_last_assistant_message(capsys):
+def test_process_stop_event_prefers_last_assistant_message(capfd):
     """When last_assistant_message is in hook input, use it directly (no transcript read)."""
     data = {
         "hook_event_name": "Stop",
@@ -118,17 +133,17 @@ def test_process_stop_event_prefers_last_assistant_message(capsys):
         "last_assistant_message": "I have fixed the bug and updated 3 test files.",
     }
 
-    import pytest
     with pytest.raises(SystemExit) as exc_info:
-        process_stop_event(data)
+        process_stop_event(data, _make_config())
     assert exc_info.value.code == 2
 
-    captured = capsys.readouterr()
-    assert "REQUIRED ACTION" in captured.err
-    assert "fixed the bug" in captured.err
+    captured = capfd.readouterr()
+    output = json.loads(captured.err)
+    assert output["decision"] == "block"
+    assert "fixed the bug" in output["additionalContext"]
 
 
-def test_process_stop_event_stays_silent(tmp_path, capsys):
+def test_process_stop_event_stays_silent(tmp_path, capfd):
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
         '{"role": "assistant", "content": "The answer is 42."}\n',
@@ -136,22 +151,22 @@ def test_process_stop_event_stays_silent(tmp_path, capsys):
     )
     data = {"hook_event_name": "Stop", "transcript_path": str(transcript)}
 
-    process_stop_event(data)
+    process_stop_event(data, _make_config())
 
-    captured = capsys.readouterr()
+    captured = capfd.readouterr()
     assert captured.out == ""
 
 
-def test_process_stop_event_missing_transcript(capsys):
+def test_process_stop_event_missing_transcript(capfd):
     data = {"hook_event_name": "Stop", "transcript_path": "/nonexistent/file"}
 
-    process_stop_event(data)
+    process_stop_event(data, _make_config())
 
-    captured = capsys.readouterr()
+    captured = capfd.readouterr()
     assert captured.out == ""
 
 
-def test_process_stop_event_skips_when_stop_hook_active(tmp_path, capsys):
+def test_process_stop_event_skips_when_stop_hook_active(tmp_path, capfd):
     """When stop_hook_active is true, injector must NOT re-trigger (avoid loop)."""
     transcript = tmp_path / "transcript.jsonl"
     transcript.write_text(
@@ -165,7 +180,86 @@ def test_process_stop_event_skips_when_stop_hook_active(tmp_path, capsys):
     }
 
     # Should NOT raise SystemExit — just return silently
-    process_stop_event(data)
+    process_stop_event(data, _make_config())
 
-    captured = capsys.readouterr()
+    captured = capfd.readouterr()
     assert captured.err == ""
+
+
+def test_process_stop_event_outputs_json_with_style(tmp_path, capfd):
+    """Stderr output must be valid JSON containing decision and additionalContext."""
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        '{"role": "assistant", "content": "I have fixed the bug and updated tests."}\n',
+        encoding="utf-8",
+    )
+    data = {"transcript_path": str(transcript)}
+    user_config = _make_config(style="kawaii", nickname="Senpai")
+
+    with pytest.raises(SystemExit) as exc_info:
+        process_stop_event(data, user_config)
+    assert exc_info.value.code == 2
+
+    captured = capfd.readouterr()
+    output = json.loads(captured.err)
+    assert output["decision"] == "block"
+    assert "additionalContext" in output
+    assert "kawaii" in output["additionalContext"]
+    assert "Senpai" in output["additionalContext"]
+
+
+def test_process_stop_event_includes_nickname_in_context(tmp_path, capfd):
+    """additionalContext must include nickname, style, and subagent_tts command."""
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        '{"role": "assistant", "content": "I have completed the implementation."}\n',
+        encoding="utf-8",
+    )
+    data = {"transcript_path": str(transcript)}
+    user_config = _make_config(style="secretary", nickname="Boss")
+
+    with pytest.raises(SystemExit):
+        process_stop_event(data, user_config)
+
+    captured = capfd.readouterr()
+    output = json.loads(captured.err)
+    assert output["decision"] == "block"
+    assert "Boss" in output["additionalContext"]
+    assert "secretary" in output["additionalContext"]
+    assert "subagent_tts" in output["additionalContext"]
+
+
+def test_process_stop_event_persona_override_null(tmp_path, capfd):
+    """When persona_override is None, additionalContext should contain 'null'."""
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        '{"role": "assistant", "content": "Done! I have updated the config file."}\n',
+        encoding="utf-8",
+    )
+    data = {"transcript_path": str(transcript)}
+    user_config = _make_config(persona_override=None)
+
+    with pytest.raises(SystemExit):
+        process_stop_event(data, user_config)
+
+    captured = capfd.readouterr()
+    output = json.loads(captured.err)
+    assert "null" in output["additionalContext"]
+
+
+def test_process_stop_event_persona_override_set(tmp_path, capfd):
+    """When persona_override is set, it appears in additionalContext."""
+    transcript = tmp_path / "transcript.jsonl"
+    transcript.write_text(
+        '{"role": "assistant", "content": "Done! I have refactored the module."}\n',
+        encoding="utf-8",
+    )
+    data = {"transcript_path": str(transcript)}
+    user_config = _make_config(persona_override="Be extra cheerful today")
+
+    with pytest.raises(SystemExit):
+        process_stop_event(data, user_config)
+
+    captured = capfd.readouterr()
+    output = json.loads(captured.err)
+    assert "Be extra cheerful today" in output["additionalContext"]
