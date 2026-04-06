@@ -1,47 +1,37 @@
-"""Standalone TTS script for the voice-buddy subagent's SubagentStop hook.
+"""TTS entry point for agent subagent — called via Bash by the voice-buddy agent."""
 
-Reads stdin JSON, extracts last assistant message from agent_transcript_path,
-synthesizes speech, and plays audio.
-
-This script is invoked by the subagent's hook, NOT by the main hook entry point.
-"""
-
-import json
 import sys
-
-from voice_buddy.injector import extract_last_assistant_message
+from voice_buddy.config import load_user_config
+from voice_buddy.styles import load_style
 from voice_buddy.tts import synthesize_to_file
 from voice_buddy.player import play_audio
 
 
 def main() -> None:
-    """Read subagent transcript and speak the generated message."""
-    try:
-        stdin_content = sys.stdin.read().strip()
-        if not stdin_content:
-            sys.exit(0)
+    """Synthesize and play the given text using active style's TTS config."""
+    if len(sys.argv) < 2:
+        print("Usage: python -m voice_buddy.subagent_tts '<text>'", file=sys.stderr)
+        sys.exit(1)
 
-        data = json.loads(stdin_content)
+    text = sys.argv[1]
 
-        # Use agent_transcript_path (NOT transcript_path, which is parent session)
-        transcript_path = data.get("agent_transcript_path")
-        if not transcript_path:
-            sys.exit(0)
+    # Load user config to get active style
+    user_config = load_user_config()
+    style_id = user_config.get("style", "cute-girl")
 
-        message = extract_last_assistant_message(transcript_path)
-        if not message:
-            sys.exit(0)
+    # Load style for TTS settings
+    style = load_style(style_id)
+    if style:
+        tts = style["tts"]
+        voice = tts.get("voice", "zh-CN-XiaoyiNeural")
+        rate = tts.get("rate", "+0%")
+        pitch = tts.get("pitch", "+0Hz")
+    else:
+        voice, rate, pitch = "zh-CN-XiaoyiNeural", "+0%", "+0Hz"
 
-        audio_path = synthesize_to_file(message)
-        if audio_path is None:
-            sys.exit(0)
-
+    audio_path = synthesize_to_file(text, voice=voice, rate=rate, pitch=pitch)
+    if audio_path:
         play_audio(audio_path)
-        sys.exit(0)
-
-    except Exception as e:
-        print(f"subagent_tts error: {e}", file=sys.stderr)
-        sys.exit(0)
 
 
 if __name__ == "__main__":

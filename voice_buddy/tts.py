@@ -6,46 +6,36 @@ import asyncio
 import os
 import sys
 import tempfile
-from pathlib import Path
-
-from voice_buddy.config import load_config
+from typing import Optional
 
 
-async def _synthesize(text: str, output_path: str) -> None:
+async def _synthesize(text: str, voice: str, rate: str, pitch: str, output_path: str) -> None:
     """Run edge-tts synthesis asynchronously."""
     import edge_tts
-
-    config = load_config()
-    tts_config = config["tts"]
-
-    communicate = edge_tts.Communicate(
-        text,
-        voice=tts_config["voice"],
-        rate=tts_config["rate"],
-        pitch=tts_config["pitch"],
-    )
+    communicate = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch)
     await communicate.save(output_path)
 
 
-def synthesize_to_file(text: str) -> str | None:
-    """Synthesize text to a temporary audio file.
-
-    Returns the path to the generated .mp3 file, or None on failure.
-    The caller is responsible for cleanup, but since playback is async
-    (Popen with start_new_session), we schedule cleanup after a delay.
-    """
+def synthesize_to_file(
+    text: str,
+    voice: str = "zh-CN-XiaoyiNeural",
+    rate: str = "+0%",
+    pitch: str = "+0Hz",
+) -> Optional[str]:
+    """Synchronous wrapper: synthesize text and return temp file path, or None on error."""
     try:
-        # Create a temp file that won't be auto-deleted (async playback needs it)
         tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
-        tmp_path = tmp.name
         tmp.close()
 
-        asyncio.run(_synthesize(text, tmp_path))
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_synthesize(text, voice, rate, pitch, tmp.name))
+        finally:
+            loop.close()
 
-        # Schedule cleanup after 30 seconds (enough for playback to finish)
-        _schedule_cleanup(tmp_path, delay=30)
-
-        return tmp_path
+        # Schedule cleanup after 30 seconds
+        _schedule_cleanup(tmp.name, delay=30)
+        return tmp.name
     except Exception as e:
         print(f"TTS synthesis failed: {e}", file=sys.stderr)
         return None
