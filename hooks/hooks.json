@@ -1,0 +1,45 @@
+{
+  "description": "CC voice companion - plays personality-driven audio on Claude Code events",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [{
+          "type": "command",
+          "command": "PYTHONPATH=\"${CLAUDE_PLUGIN_ROOT}\" python3 -m voice_buddy",
+          "timeout": 5,
+          "async": true
+        }]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [{
+          "type": "command",
+          "command": "PYTHONPATH=\"${CLAUDE_PLUGIN_ROOT}\" python3 -m voice_buddy",
+          "timeout": 5,
+          "async": true
+        }]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [{
+          "type": "command",
+          "command": "PYTHONPATH=\"${CLAUDE_PLUGIN_ROOT}\" python3 -m voice_buddy",
+          "timeout": 5,
+          "async": true
+        }]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [{
+          "type": "command",
+          "command": "PYTHONPATH=\"${CLAUDE_PLUGIN_ROOT}\" python3 -m voice_buddy",
+          "timeout": 5,
+          "async": false
+        }]
+      }
+    ]
+  }
+}

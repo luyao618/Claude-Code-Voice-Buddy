@@ -1,0 +1,11 @@
+{
+  "name": "voice-buddy",
+  "description": "CC - personality-driven voice companion for Claude Code",
+  "version": "1.0.0",
+  "author": {
+    "name": "luyao618"
+  },
+  "repository": "https://github.com/luyao618/Claude-Code-Voice-Buddy",
+  "license": "MIT",
+  "keywords": ["voice", "tts", "personality", "companion"]
+}
