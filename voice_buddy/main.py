@@ -1,83 +1,135 @@
-"""Hook entry point: read stdin JSON, dispatch by event type."""
+"""Entry point for Voice Buddy hook events."""
+
+from __future__ import annotations
 
 import json
-import sys
+import logging
 import os
-from datetime import datetime
+import sys
+from pathlib import Path
+from typing import Optional
 
-_DEBUG_LOG = os.path.expanduser("~/voice-buddy-debug.log")
-
-
-def _debug(msg: str) -> None:
-    """Append a debug message to the log file."""
-    try:
-        with open(_DEBUG_LOG, "a", encoding="utf-8") as f:
-            f.write(f"[{datetime.now().isoformat()}] {msg}\n")
-    except Exception:
-        pass
-
-
+from voice_buddy.config import load_user_config, get_repo_root
 from voice_buddy.context import analyze_context
 from voice_buddy.response import select_response
+from voice_buddy.styles import load_style
 from voice_buddy.tts import synthesize_to_file
 from voice_buddy.player import play_audio
 
+logger = logging.getLogger("voice_buddy")
+
+_EVENT_NAME_MAP = {
+    "SessionStart": "sessionstart",
+    "SessionEnd": "sessionend",
+    "Notification": "notification",
+    "Stop": "stop",
+}
+
+
+def _debug(msg: str) -> None:
+    """Legacy debug helper — routes to logger for backward compatibility."""
+    logger.debug(msg)
+
+
+def _get_assets_dir() -> Path:
+    """Return the assets directory path."""
+    return get_repo_root() / "assets"
+
+
+def resolve_audio_path(style: str, audio_id: str) -> Optional[str]:
+    """Look up a pre-packaged audio file. Returns path string or None."""
+    assets_dir = _get_assets_dir()
+    audio_file = assets_dir / "audio" / style / f"{audio_id}.mp3"
+    if audio_file.exists():
+        return str(audio_file)
+    return None
+
 
 def handle_hook_event(data: dict) -> None:
-    """Process a hook event: analyze, generate response, speak."""
+    """Process a hook event from Claude Code."""
     event_name = data.get("hook_event_name", "")
-    _debug(f"EVENT: {event_name}")
+    event_key = _EVENT_NAME_MAP.get(event_name, "")
 
-    # Stop event: try subagent path (block + additionalContext)
-    if event_name == "Stop":
-        _debug(f"Stop event received. transcript_path={data.get('transcript_path', 'MISSING')}")
-        handle_stop_event(data)
+    # Load user config
+    try:
+        user_config = load_user_config()
+    except Exception as e:
+        logger.debug(f"Failed to load user config: {e}")
         return
 
-    # All other events: context -> response -> tts -> play
+    # Check global enable
+    if not user_config.get("enabled", True):
+        return
+
+    # Check per-event enable
+    if not user_config.get("events", {}).get(event_key, True):
+        return
+
+    style = user_config.get("style", "cute-girl")
+    nickname = user_config.get("nickname", "Master")
+
+    # Stop event goes through injector path
+    if event_name == "Stop":
+        handle_stop_event(data, user_config)
+        return
+
+    # Analyze context
     ctx = analyze_context(data)
     if ctx is None:
-        _debug(f"  context returned None, staying silent")
         return
 
-    _debug(f"  context: event={ctx.event} sub_event={ctx.sub_event}")
-    text = select_response(ctx)
-    if text is None:
-        _debug(f"  no template match, staying silent")
+    # Select response
+    resp = select_response(ctx, style=style, nickname=nickname)
+    if resp is None:
         return
 
-    _debug(f"  response: {text}")
-    audio_path = synthesize_to_file(text)
-    if audio_path is None:
-        _debug(f"  TTS failed")
-        return
+    # Try pre-packaged audio first
+    if resp.audio_id:
+        audio_path = resolve_audio_path(style, resp.audio_id)
+        if audio_path:
+            play_audio(audio_path)
+            return
 
-    _debug(f"  playing: {audio_path}")
-    play_audio(audio_path)
+    # Fallback to real-time TTS
+    style_def = load_style(style)
+    tts_config = style_def["tts"] if style_def else {}
+
+    audio_path = synthesize_to_file(
+        resp.text,
+        voice=tts_config.get("voice", "zh-CN-XiaoyiNeural"),
+        rate=tts_config.get("rate", "+0%"),
+        pitch=tts_config.get("pitch", "+0Hz"),
+    )
+    if audio_path:
+        play_audio(audio_path)
 
 
-def handle_stop_event(data: dict) -> None:
+def handle_stop_event(data: dict, user_config: dict = None) -> None:
     """Handle Stop event: block + inject context to trigger subagent."""
     from voice_buddy.injector import process_stop_event
     process_stop_event(data)
 
 
 def run() -> None:
-    """Main entry point: read stdin, parse JSON, handle event."""
+    """Read hook JSON from stdin and process."""
+    # Setup debug logging
+    log_path = os.path.expanduser("~/voice-buddy-debug.log")
+    logging.basicConfig(
+        filename=log_path,
+        level=logging.DEBUG,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+
     try:
-        stdin_content = sys.stdin.read().strip()
-        if not stdin_content:
-            sys.exit(0)
-
-        data = json.loads(stdin_content)
-        handle_hook_event(data)
-        sys.exit(0)
-
-    except SystemExit:
-        raise  # Let sys.exit() propagate (important for exit code 2 in Stop hook)
-    except json.JSONDecodeError as e:
-        print(f"Error parsing JSON input: {e}", file=sys.stderr)
-        sys.exit(0)
+        raw = sys.stdin.read()
+        data = json.loads(raw) if raw.strip() else {}
     except Exception as e:
-        print(f"Unexpected error: {e}", file=sys.stderr)
-        sys.exit(0)
+        logger.debug(f"Failed to read stdin: {e}")
+        return
+
+    logger.debug(f"Hook event: {data.get('hook_event_name', 'unknown')}")
+
+    try:
+        handle_hook_event(data)
+    except Exception as e:
+        logger.debug(f"Error handling event: {e}")
