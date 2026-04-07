@@ -4,122 +4,6 @@
 
 ---
 
-## 中文
-
-**Voice Buddy** 让 Claude Code 不再沉默。CC 是一个有性格的语音伙伴，在关键时刻用你选择的风格陪伴你编程。
-
-```
-打开 Claude Code  → "欢迎回来，今天也要加油哦~"         (cute-girl)
-需要你注意时      → "Boss, your attention is needed"    (secretary)
-任务完成          → "Senpai、バグ直したよ~"              (kawaii)
-关闭会话          → "辛苦了，好好休息一下"               (warm-boy)
-```
-
-### 7 种风格，3 种语言
-
-| 风格 | 语言 | 描述 | TTS 语音 | 默认称呼 |
-|------|------|------|----------|----------|
-| **cute-girl** | 中文 | 可爱甜美 | zh-CN-XiaoyiNeural | Master |
-| **elegant-lady** | 中文 | 优雅知性 | zh-CN-XiaoxiaoNeural | Master |
-| **warm-boy** | 中文 | 温暖体贴 | zh-CN-YunxiNeural | Master |
-| **secretary** | 英文 | 专业干练 | en-US-JennyNeural | Boss |
-| **steward** | 英文 | 英式管家 | en-GB-RyanNeural | Sir |
-| **cyber-girl** | 英文 | 赛博机器姬 | en-GB-SoniaNeural | Commander |
-| **kawaii** | 日文 | 元气可爱 | ja-JP-NanamiNeural | Senpai |
-
-### 工作原理
-
-Voice Buddy 接入 [Claude Code 的 Hook 系统](https://docs.anthropic.com/en/docs/claude-code/hooks)，在关键事件触发时播放语音。
-
-**三层音频架构：**
-
-| 通道 | 延迟 | 适用场景 | 实现方式 |
-|------|------|----------|----------|
-| **Pre-packaged** | <100ms | 开始、结束 | 预生成 MP3 直接播放 |
-| **实时 TTS** | ~1s | 通知提醒 | edge-tts 实时合成（含 nickname 替换） |
-| **AI 总结** | ~3s | 任务完成 | Claude subagent 生成 + TTS |
-
-### 安装
-
-#### 环境要求
-
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
-- Python 3.9+
-- 音频播放器（macOS: `afplay` 内置, Linux: `paplay`/`aplay`/`mpg123`）
-
-#### 从 Plugin Marketplace 安装
-
-在 Claude Code 中依次运行以下两条命令：
-```bash
-/plugin marketplace add luyao618/Claude-Code-Voice-Buddy   # 1. 添加插件源
-/plugin install voice-buddy                                 # 2. 安装插件
-```
-
-安装时会提示选择**风格**和**称呼**，也可以直接回车使用默认值（cute-girl / Master）。
-
-安装完成后 Hook 自动注册，无需手动配置。
-
-#### 推荐：添加权限白名单
-
-在 `.claude/settings.json` 的 `allow` 列表中加入以下规则，可以跳过每次语音播放的权限确认，体验更流畅：
-
-```json
-"Bash(PYTHONPATH=* python3 -m voice_buddy*)",
-"Bash(PYTHONPATH=* python3 -m voice_buddy.*)"
-```
-
-### 配置
-
-安装后，在 Claude Code 对话中输入 `/voice-buddy` 即可进入配置面板。
-
-也可以直接告诉 Claude 你想要的设置，例如：
-- "帮我把 Voice Buddy 切到 kawaii 风格"
-- "把称呼改成 Senpai"
-- "关掉 notification 的语音"
-
-**或者使用 CLI 命令**（插件安装后 `voice-buddy` 命令自动可用）：
-
-```bash
-# 切换风格
-voice-buddy config --style kawaii
-
-# 修改称呼
-voice-buddy config --nickname Senpai
-
-# 同时修改
-voice-buddy config --style secretary --nickname Boss
-
-# 禁用/启用特定事件
-voice-buddy config --disable notification
-voice-buddy config --enable notification
-
-# 全局开关
-voice-buddy on
-voice-buddy off
-
-# 试听
-voice-buddy test sessionstart
-voice-buddy test notification
-```
-
-配置文件位置：
-- macOS: `~/Library/Application Support/voice-buddy/config.json`
-- Linux: `~/.config/voice-buddy/config.json`
-- Windows: `%APPDATA%\voice-buddy\config.json`
-
-### 支持的事件
-
-| 事件 | 触发时机 | 音频来源 |
-|------|----------|----------|
-| **SessionStart** | 打开 Claude Code | Pre-packaged MP3 |
-| **SessionEnd** | 关闭会话 | Pre-packaged MP3 |
-| **Notification** | Claude 发送通知 | 实时 TTS（含称呼） |
-| **Stop** | Claude 完成任务 | AI 生成个性化总结 |
-
----
-
-## English
-
 **Voice Buddy** turns Claude Code into a more human experience. **CC** is a personality-driven voice companion that speaks at key moments in your coding workflow.
 
 ```
@@ -288,7 +172,7 @@ Claude-Code-Voice-Buddy/
 │   ├── subagent_tts.py      # Agent TTS entry point
 │   ├── generate_audio.py    # Dev utility: generate MP3 assets
 │   └── cli.py               # CLI commands
-└── tests/                   # 79+ tests
+└── tests/                   # 86 tests
 ```
 
 ### Development
@@ -305,6 +189,120 @@ python3 -m pytest tests/ -v
 # Regenerate pre-packaged audio (after editing templates)
 python3 -m voice_buddy.generate_audio
 ```
+
+---
+
+## 中文
+
+**Voice Buddy** 让 Claude Code 不再沉默。CC 是一个有性格的语音伙伴，在关键时刻用你选择的风格陪伴你编程。
+
+```
+打开 Claude Code  → "欢迎回来，今天也要加油哦~"         (cute-girl)
+需要你注意时      → "Boss, your attention is needed"    (secretary)
+任务完成          → "Senpai、バグ直したよ~"              (kawaii)
+关闭会话          → "辛苦了，好好休息一下"               (warm-boy)
+```
+
+### 7 种风格，3 种语言
+
+| 风格 | 语言 | 描述 | TTS 语音 | 默认称呼 |
+|------|------|------|----------|----------|
+| **cute-girl** | 中文 | 可爱甜美 | zh-CN-XiaoyiNeural | Master |
+| **elegant-lady** | 中文 | 优雅知性 | zh-CN-XiaoxiaoNeural | Master |
+| **warm-boy** | 中文 | 温暖体贴 | zh-CN-YunxiNeural | Master |
+| **secretary** | 英文 | 专业干练 | en-US-JennyNeural | Boss |
+| **steward** | 英文 | 英式管家 | en-GB-RyanNeural | Sir |
+| **cyber-girl** | 英文 | 赛博机器姬 | en-GB-SoniaNeural | Commander |
+| **kawaii** | 日文 | 元气可爱 | ja-JP-NanamiNeural | Senpai |
+
+### 工作原理
+
+Voice Buddy 接入 [Claude Code 的 Hook 系统](https://docs.anthropic.com/en/docs/claude-code/hooks)，在关键事件触发时播放语音。
+
+**三层音频架构：**
+
+| 通道 | 延迟 | 适用场景 | 实现方式 |
+|------|------|----------|----------|
+| **Pre-packaged** | <100ms | 开始、结束 | 预生成 MP3 直接播放 |
+| **实时 TTS** | ~1s | 通知提醒 | edge-tts 实时合成（含 nickname 替换） |
+| **AI 总结** | ~3s | 任务完成 | Claude subagent 生成 + TTS |
+
+### 安装
+
+#### 环境要求
+
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code)
+- Python 3.9+
+- 音频播放器（macOS: `afplay` 内置, Linux: `paplay`/`aplay`/`mpg123`）
+
+#### 从 Plugin Marketplace 安装
+
+在 Claude Code 中依次运行以下两条命令：
+```bash
+/plugin marketplace add luyao618/Claude-Code-Voice-Buddy   # 1. 添加插件源
+/plugin install voice-buddy                                 # 2. 安装插件
+```
+
+安装时会提示选择**风格**和**称呼**，也可以直接回车使用默认值（cute-girl / Master）。
+
+安装完成后 Hook 自动注册，无需手动配置。
+
+#### 推荐：添加权限白名单
+
+在 `.claude/settings.json` 的 `allow` 列表中加入以下规则，可以跳过每次语音播放的权限确认，体验更流畅：
+
+```json
+"Bash(PYTHONPATH=* python3 -m voice_buddy*)",
+"Bash(PYTHONPATH=* python3 -m voice_buddy.*)"
+```
+
+### 配置
+
+安装后，在 Claude Code 对话中输入 `/voice-buddy` 即可进入配置面板。
+
+也可以直接告诉 Claude 你想要的设置，例如：
+- "帮我把 Voice Buddy 切到 kawaii 风格"
+- "把称呼改成 Senpai"
+- "关掉 notification 的语音"
+
+**或者使用 CLI 命令**（插件安装后 `voice-buddy` 命令自动可用）：
+
+```bash
+# 切换风格
+voice-buddy config --style kawaii
+
+# 修改称呼
+voice-buddy config --nickname Senpai
+
+# 同时修改
+voice-buddy config --style secretary --nickname Boss
+
+# 禁用/启用特定事件
+voice-buddy config --disable notification
+voice-buddy config --enable notification
+
+# 全局开关
+voice-buddy on
+voice-buddy off
+
+# 试听
+voice-buddy test sessionstart
+voice-buddy test notification
+```
+
+配置文件位置：
+- macOS: `~/Library/Application Support/voice-buddy/config.json`
+- Linux: `~/.config/voice-buddy/config.json`
+- Windows: `%APPDATA%\voice-buddy\config.json`
+
+### 支持的事件
+
+| 事件 | 触发时机 | 音频来源 |
+|------|----------|----------|
+| **SessionStart** | 打开 Claude Code | Pre-packaged MP3 |
+| **SessionEnd** | 关闭会话 | Pre-packaged MP3 |
+| **Notification** | Claude 发送通知 | 实时 TTS（含称呼） |
+| **Stop** | Claude 完成任务 | AI 生成个性化总结 |
 
 ## License
 
