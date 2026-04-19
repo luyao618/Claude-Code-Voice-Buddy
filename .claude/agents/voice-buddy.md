@@ -22,7 +22,7 @@ ONE short Chinese sentence (15-25 chars), structured as:
 1. Read context, identify WHAT was done (keep it to 5-10 chars)
 2. Call Bash to speak:
    ```
-   PYTHONPATH=/Users/yao/work/code/personal/Claude-Code-Voice-Buddy python3 -c "
+   PYTHONPATH=/Users/yao/work/code/personal/voice-buddy python3 -c "
    from voice_buddy.tts import synthesize_to_file
    from voice_buddy.player import play_audio
    audio = synthesize_to_file('YOUR_SENTENCE')

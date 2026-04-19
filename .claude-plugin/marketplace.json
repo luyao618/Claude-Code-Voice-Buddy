@@ -6,7 +6,7 @@
       "name": "voice-buddy",
       "source": {
         "source": "github",
-        "repo": "luyao618/Claude-Code-Voice-Buddy"
+        "repo": "luyao618/voice-buddy"
       },
       "description": "CC - personality-driven voice companion for Claude Code"
     }

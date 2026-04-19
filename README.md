@@ -1,4 +1,4 @@
-# Claude Code Voice Buddy
+# Voice Buddy
 
 > **CC** — Your personality-driven voice companion for Claude Code.
 
@@ -49,7 +49,7 @@ Voice Buddy hooks into [Claude Code's hook system](https://docs.anthropic.com/en
 
 Run these two commands in Claude Code, one after the other:
 ```bash
-/plugin marketplace add luyao618/Claude-Code-Voice-Buddy   # 1. Add plugin source
+/plugin marketplace add luyao618/voice-buddy   # 1. Add plugin source
 /plugin install voice-buddy                                 # 2. Install plugin
 ```
 
@@ -142,7 +142,7 @@ Config file location:
 #### Project Structure
 
 ```
-Claude-Code-Voice-Buddy/
+voice-buddy/
 ├── .claude-plugin/          # Plugin manifest
 │   ├── plugin.json
 │   └── marketplace.json
@@ -178,8 +178,8 @@ Claude-Code-Voice-Buddy/
 ### Development
 
 ```bash
-git clone https://github.com/luyao618/Claude-Code-Voice-Buddy.git
-cd Claude-Code-Voice-Buddy
+git clone https://github.com/luyao618/voice-buddy.git
+cd voice-buddy
 pip install -r requirements.txt
 pip install -r requirements-dev.txt
 
@@ -239,7 +239,7 @@ Voice Buddy 接入 [Claude Code 的 Hook 系统](https://docs.anthropic.com/en/d
 
 在 Claude Code 中依次运行以下两条命令：
 ```bash
-/plugin marketplace add luyao618/Claude-Code-Voice-Buddy   # 1. 添加插件源
+/plugin marketplace add luyao618/voice-buddy   # 1. 添加插件源
 /plugin install voice-buddy                                 # 2. 安装插件
 ```
 

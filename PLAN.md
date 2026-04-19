@@ -128,7 +128,7 @@ Example responses:
 ## 仓库结构
 
 ```
-Claude-Code-Voice-Buddy/
+voice-buddy/
 ├── README.md
 ├── LICENSE (MIT)
 │
