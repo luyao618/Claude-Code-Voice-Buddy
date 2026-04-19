@@ -17,6 +17,12 @@ DEFAULT_CONFIG = {
         "stop": True,
     },
     "persona_override": None,
+    # Hotkey-stop feature (macOS only). hotkey is an F-key name (F1..F12).
+    "hotkey": "F2",
+    "hotkey_enabled": True,
+    # Cached path of the python interpreter that was last granted Accessibility.
+    # Used by hotkey-doctor to detect drift on venv recreate / Python upgrade.
+    "last_trusted_executable": None,
 }
 
 _REPO_ROOT = Path(__file__).parent.parent

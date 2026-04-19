@@ -1,1 +1,2 @@
 edge-tts
+pyobjc-framework-Quartz>=10.0,<12.0; sys_platform == "darwin"
