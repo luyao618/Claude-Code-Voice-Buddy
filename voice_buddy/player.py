@@ -81,12 +81,19 @@ def play_audio(file_path: str | Path) -> bool:
                 return True
             return False
         else:
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 audio_player + [str(file_path)],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 start_new_session=True,
             )
+            # Register PID so the F2 hotkey can SIGTERM it. Failure here must
+            # NEVER break playback.
+            try:
+                from voice_buddy import playback_pids
+                playback_pids.add(proc.pid)
+            except Exception as e:  # pragma: no cover - defensive
+                print(f"playback_pids.add failed (non-fatal): {e}", file=sys.stderr)
             return True
     except (FileNotFoundError, OSError) as e:
         print(f"Error playing audio: {e}", file=sys.stderr)

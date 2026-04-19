@@ -68,6 +68,24 @@ def handle_hook_event(data: dict) -> None:
     style = user_config.get("style", "cute-girl")
     nickname = user_config.get("nickname", "Master")
 
+    # Hotkey listener lifecycle wiring (macOS only; gated by config).
+    if event_name == "SessionStart":
+        try:
+            from voice_buddy import listener_supervisor
+            listener_supervisor.ensure_listener_for_session(
+                str(data.get("session_id", "default"))
+            )
+        except Exception as e:
+            logger.debug(f"hotkey supervisor (start) failed: {e}")
+    elif event_name == "SessionEnd":
+        try:
+            from voice_buddy import listener_supervisor
+            listener_supervisor.release_session(
+                str(data.get("session_id", "default"))
+            )
+        except Exception as e:
+            logger.debug(f"hotkey supervisor (end) failed: {e}")
+
     # Stop event goes through injector path
     if event_name == "Stop":
         handle_stop_event(data, user_config)

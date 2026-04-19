@@ -251,19 +251,82 @@ def do_config(
 def do_on() -> None:
     """Enable voice buddy globally."""
     from voice_buddy.config import load_user_config, save_user_config
+    from voice_buddy import coord
     config = load_user_config()
     config["enabled"] = True
     save_user_config(config)
+    coord.reload_listener_config()
     print("Voice Buddy: ON")
 
 
 def do_off() -> None:
     """Disable voice buddy globally."""
     from voice_buddy.config import load_user_config, save_user_config
+    from voice_buddy import coord
     config = load_user_config()
     config["enabled"] = False
     save_user_config(config)
+    # Live-reload listener if running.
+    coord.reload_listener_config()
     print("Voice Buddy: OFF")
+
+
+def do_stop() -> int:
+    """CLI fallback: SIGTERM all currently-playing audio subprocesses."""
+    from voice_buddy import playback_pids
+    killed = playback_pids.kill_all()
+    print(f"Stopped {killed} playback process(es).")
+    return 0
+
+
+def do_set_hotkey(hotkey: str | None = None,
+                  disable: bool = False,
+                  enable: bool = False) -> int:
+    """Update hotkey config and live-reload the listener."""
+    from voice_buddy.config import load_user_config, save_user_config
+    from voice_buddy.keymap import is_supported, SUPPORTED_KEYS
+    from voice_buddy import coord
+
+    config = load_user_config()
+    changed = False
+
+    if hotkey is not None:
+        if not is_supported(hotkey):
+            print(
+                f"Unsupported hotkey: {hotkey!r}. "
+                f"Supported: {', '.join(SUPPORTED_KEYS)}",
+                file=sys.stderr,
+            )
+            return 2
+        config["hotkey"] = hotkey.upper()
+        changed = True
+
+    if disable:
+        config["hotkey_enabled"] = False
+        changed = True
+    if enable:
+        config["hotkey_enabled"] = True
+        changed = True
+
+    if not changed:
+        print(
+            f"hotkey={config.get('hotkey', 'F2')} "
+            f"enabled={config.get('hotkey_enabled', True)}"
+        )
+        return 0
+
+    save_user_config(config)
+    reloaded = coord.reload_listener_config()
+    suffix = " (listener reloaded)" if reloaded else " (no live listener)"
+    print(
+        f"hotkey={config['hotkey']} enabled={config['hotkey_enabled']}{suffix}"
+    )
+    return 0
+
+
+def do_hotkey_doctor(non_interactive: bool = False, as_json: bool = False) -> int:
+    from voice_buddy.hotkey_doctor import run_doctor
+    return run_doctor(non_interactive=non_interactive, as_json=as_json)
 
 
 def main() -> None:
@@ -308,10 +371,28 @@ def main() -> None:
     config_parser.add_argument("--disable", help="Disable an event")
     config_parser.add_argument("--enable", help="Enable an event")
     config_parser.add_argument("--edit-persona", action="store_true", help="Edit agent persona")
+    config_parser.add_argument("--hotkey", help="Set global stop hotkey (e.g. F2)")
+    config_parser.add_argument("--disable-hotkey", action="store_true",
+                               help="Disable the global stop hotkey")
+    config_parser.add_argument("--enable-hotkey", action="store_true",
+                               help="Enable the global stop hotkey")
 
     # on / off
     subparsers.add_parser("on", help="Enable voice buddy")
     subparsers.add_parser("off", help="Disable voice buddy")
+
+    # stop
+    subparsers.add_parser("stop", help="Immediately stop all currently-playing audio")
+
+    # hotkey-doctor
+    doctor_parser = subparsers.add_parser(
+        "hotkey-doctor",
+        help="Diagnose the global hotkey feature (Accessibility, fn-keys, listener)",
+    )
+    doctor_parser.add_argument("--non-interactive", action="store_true",
+                               help="Skip the interactive F-key press check")
+    doctor_parser.add_argument("--json", dest="as_json", action="store_true",
+                               help="Emit machine-readable JSON output")
 
     args = parser.parse_args()
 
@@ -334,13 +415,33 @@ def main() -> None:
     elif args.command == "test":
         do_test(args.event)
     elif args.command == "config":
-        do_config(style=args.style, nickname=args.nickname,
-                  disable=args.disable, enable=args.enable,
-                  edit_persona=args.edit_persona)
+        # Hotkey-related changes go through do_set_hotkey; classic style/nickname/event
+        # changes go through do_config. Both can be combined in a single invocation.
+        if args.hotkey is not None or args.disable_hotkey or args.enable_hotkey:
+            rc = do_set_hotkey(
+                hotkey=args.hotkey,
+                disable=args.disable_hotkey,
+                enable=args.enable_hotkey,
+            )
+            if rc != 0:
+                sys.exit(rc)
+        if (args.style is not None or args.nickname is not None
+                or args.disable is not None or args.enable is not None
+                or args.edit_persona):
+            do_config(style=args.style, nickname=args.nickname,
+                      disable=args.disable, enable=args.enable,
+                      edit_persona=args.edit_persona)
     elif args.command == "on":
         do_on()
     elif args.command == "off":
         do_off()
+    elif args.command == "stop":
+        sys.exit(do_stop())
+    elif args.command == "hotkey-doctor":
+        sys.exit(do_hotkey_doctor(
+            non_interactive=args.non_interactive,
+            as_json=args.as_json,
+        ))
 
 
 if __name__ == "__main__":
